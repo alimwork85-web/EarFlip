@@ -3,7 +3,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Media;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -274,8 +273,7 @@ sealed class TrayApp : Form
         {
             if (!Devices.IsActive(Devices.Buds))
             {
-                SystemSounds.Beep.Play();
-                return;
+                return; // silent on purpose: the app must never make a sound
             }
             Devices.SetDefault(Devices.Buds);
         }
@@ -332,7 +330,6 @@ sealed class TrayApp : Form
             {
                 // someone else owns that combo: keep the old one instead of running with none
                 RegisterHotKey(Handle, HotkeyId, hotMods | ModNoRepeat, hotKey);
-                SystemSounds.Beep.Play();
             }
         }
     }
@@ -365,7 +362,7 @@ sealed class TrayApp : Form
         }
         catch (Exception)
         {
-            SystemSounds.Beep.Play();
+            // silent on purpose: the app must never make a sound
         }
         startupItem.Checked = File.Exists(StartupLink);
     }
