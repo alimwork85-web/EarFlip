@@ -10,7 +10,7 @@ A tiny replacement for SoundSwitch: no installer, no notifications, no sound, no
 [![Release](https://img.shields.io/github/v/release/alimwork85-web/EarFlip?label=release&color=0aa2ff)](https://github.com/alimwork85-web/EarFlip/releases/latest)
 [![Build](https://github.com/alimwork85-web/EarFlip/actions/workflows/build.yml/badge.svg)](https://github.com/alimwork85-web/EarFlip/actions/workflows/build.yml)
 ![Platform](https://img.shields.io/badge/platform-Windows%2011%20%7C%2010-lightgrey)
-![Size](https://img.shields.io/badge/exe-24%20KB-brightgreen)
+![Size](https://img.shields.io/badge/exe-24.5%20KB-brightgreen)
 ![RAM](https://img.shields.io/badge/RAM-~33%20MB-yellow)
 ![CPU](https://img.shields.io/badge/CPU-idle%20%E2%89%A40.01%25-orange)
 
@@ -24,7 +24,7 @@ A tiny replacement for SoundSwitch: no installer, no notifications, no sound, no
 - **Watches Windows too:** change the device from Settings and the icon follows within 2 seconds.
 - **Right-click menu:** *Change shortcut* · *Run at Windows startup* · *Exit*.
 - **Single instance**, and the hotkey is released on exit.
-- **One 24 KB exe**, no framework install, no dependencies, no registry clutter (only your chosen shortcut is saved, under `HKCU\Software\EarFlip`).
+- **One 24.5 KB exe**, no framework install, no dependencies, no registry clutter (only your chosen shortcut is saved, under `HKCU\Software\EarFlip`).
 
 ## Screenshots
 
@@ -38,11 +38,11 @@ A tiny replacement for SoundSwitch: no installer, no notifications, no sound, no
 
 ## Resource usage
 
-Measured on Windows 11 with the released `EarFlip.exe` (1.1.0):
+Measured on Windows 11 with the released `EarFlip.exe` (1.2.0):
 
 | Metric | Value |
 |---|---|
-| Executable size | **24 KB** (24,576 bytes) |
+| Executable size | **24.5 KB** (25,088 bytes) |
 | Working set (RAM) | **~33.5 MB** (private ~23 MB) |
 | CPU while idle | **0.00 s over 15 s** of sampling — below 0.01% of one core |
 | Threads | 11 |
@@ -64,7 +64,7 @@ Windows SmartScreen may warn about an unsigned exe — *More info → Run anyway
 | `Ctrl + Alt + F12` | Switch output: speakers ⇄ Bluetooth headphones |
 | Tray icon (hover) | Name of the current output device |
 | Right-click → *Change shortcut* | Press the new combination (needs Ctrl/Alt/Shift); Esc cancels |
-| Right-click → *Run at Windows startup* | Tick/untick autostart (a shortcut in your Startup folder) |
+| Right-click → *Run at Windows startup* | Tick/untick autostart (a shortcut in your Startup folder; a stale one is rebuilt on the next launch) |
 | Right-click → *Exit* | Quits and releases the hotkey |
 
 ## Build from source
@@ -81,6 +81,7 @@ It compiles `EarFlip.cs` → runs `EarFlip.exe --make-icon` (writes `EarFlip.ico
 
 - The two device IDs are compiled in (they are this machine's speakers and headphones). Pointing it at another pair means editing the two constants at the top of `EarFlip.cs` and rebuilding.
 - Global polling instead of `IMMNotificationClient` is a deliberate shortcut; it costs one COM call every 2 seconds.
+- Version resources: *Properties → Details* on the exe shows **Ali Alhumedi** as company/publisher and the current version.
 
 ## License
 
@@ -107,7 +108,7 @@ Released by **Ali Alhumedi**. Free to use and modify; keep the credit.
 ### الحجم والاستهلاك
 | القياس | القيمة |
 |---|---|
-| حجم الملف التنفيذي | **24 كيلوبايت** |
+| حجم الملف التنفيذي | **24.5 كيلوبايت** |
 | الذاكرة عند التشغيل | **~33.5 ميجابايت** |
 | المعالج في وضع السكون | **أقل من 0.01%** من نواة واحدة |
 | الاعتماديات | لا شيء — .NET Framework الموجود في Windows |

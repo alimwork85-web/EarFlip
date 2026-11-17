@@ -14,9 +14,9 @@ using Microsoft.Win32;
 [assembly: AssemblyCompany("Ali Alhumedi")]
 [assembly: AssemblyProduct("EarFlip")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Ali Alhumedi")]
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
-[assembly: AssemblyInformationalVersion("1.1.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyInformationalVersion("1.2.0")]
 
 static class Devices
 {
@@ -240,6 +240,7 @@ sealed class TrayApp : Form
     {
         ShowInTaskbar = false;
         LoadHotkey();
+        EnsureStartupLink();
 
         startupItem = new ToolStripMenuItem("التشغيل عند بدء ويندوز", null, delegate { ToggleStartup(); });
         startupItem.Checked = File.Exists(StartupLink);
@@ -348,6 +349,46 @@ sealed class TrayApp : Form
         get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "EarFlip.lnk"); }
     }
 
+    // repair a shortcut Windows can no longer launch (folder moved, or an old test build wrote it)
+    void EnsureStartupLink()
+    {
+        string link = StartupLink;
+        if (!File.Exists(link)) return; // no shortcut means the user turned it off
+        try
+        {
+            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+            object shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null,
+                Activator.CreateInstance(shellType), new object[] { link });
+            object target = shortcut.GetType().InvokeMember("TargetPath", BindingFlags.GetProperty, null, shortcut, null);
+            if (string.Equals(target as string, Application.ExecutablePath, StringComparison.OrdinalIgnoreCase)) return;
+        }
+        catch
+        {
+            return;
+        }
+        try
+        {
+            CreateStartupLink();
+        }
+        catch
+        {
+            // silent on purpose: the app must never make a sound
+        }
+    }
+
+    static void CreateStartupLink()
+    {
+        string link = StartupLink;
+        // WScript.Shell via late binding keeps the build reference-free
+        Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+        object shell = Activator.CreateInstance(shellType);
+        object shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { link });
+        Type shortcutType = shortcut.GetType();
+        shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { Application.ExecutablePath });
+        shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { Path.GetDirectoryName(Application.ExecutablePath) });
+        shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
+    }
+
     void ToggleStartup()
     {
         try
@@ -359,14 +400,7 @@ sealed class TrayApp : Form
             }
             else
             {
-                // WScript.Shell via late binding keeps the build reference-free
-                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-                object shell = Activator.CreateInstance(shellType);
-                object shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { link });
-                Type shortcutType = shortcut.GetType();
-                shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { Application.ExecutablePath });
-                shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { Path.GetDirectoryName(Application.ExecutablePath) });
-                shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
+                CreateStartupLink();
             }
         }
         catch (Exception)
