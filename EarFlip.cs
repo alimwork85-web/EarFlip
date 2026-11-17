@@ -239,6 +239,7 @@ sealed class TrayApp : Form
         RegisterHotKey(Handle, HotkeyId, ModControlAlt | ModNoRepeat, VkF12);
 
         poll.Interval = 2000;
+        // shortcut: polling بدل IMMNotificationClient، يُرقّى إن ظهر بطء
         poll.Tick += delegate { RefreshTray(); };
         poll.Start();
     }
