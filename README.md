@@ -11,7 +11,7 @@ A tiny replacement for SoundSwitch: no installer, no notifications, no sound, no
 [![Build](https://github.com/alimwork85-web/EarFlip/actions/workflows/build.yml/badge.svg)](https://github.com/alimwork85-web/EarFlip/actions/workflows/build.yml)
 ![Platform](https://img.shields.io/badge/platform-Windows%2011%20%7C%2010-lightgrey)
 ![Size](https://img.shields.io/badge/exe-24.5%20KB-brightgreen)
-![RAM](https://img.shields.io/badge/RAM-~33%20MB-yellow)
+![RAM](https://img.shields.io/badge/RAM-~39%20MB-yellow)
 ![CPU](https://img.shields.io/badge/CPU-idle%20%E2%89%A40.01%25-orange)
 
 ---
@@ -43,9 +43,9 @@ Measured on Windows 11 with the released `EarFlip.exe` (1.2.0):
 | Metric | Value |
 |---|---|
 | Executable size | **24.5 KB** (25,088 bytes) |
-| Working set (RAM) | **~33.5 MB** (private ~23 MB) |
+| Working set (RAM) | **~39 MB** (private ~24 MB) |
 | CPU while idle | **0.00 s over 15 s** of sampling — below 0.01% of one core |
-| Threads | 11 |
+| Threads | 13 |
 | Background polling | one 2000 ms timer, one COM call per tick |
 | Dependencies | none — in-box .NET Framework 4.x only |
 
@@ -109,7 +109,7 @@ Released by **Ali Alhumedi**. Free to use and modify; keep the credit.
 | القياس | القيمة |
 |---|---|
 | حجم الملف التنفيذي | **24.5 كيلوبايت** |
-| الذاكرة عند التشغيل | **~33.5 ميجابايت** |
+| الذاكرة عند التشغيل | **~39 ميجابايت** |
 | المعالج في وضع السكون | **أقل من 0.01%** من نواة واحدة |
 | الاعتماديات | لا شيء — .NET Framework الموجود في Windows |
 
