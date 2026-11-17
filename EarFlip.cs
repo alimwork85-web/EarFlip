@@ -9,6 +9,15 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
+[assembly: AssemblyTitle("EarFlip")]
+[assembly: AssemblyDescription("Tiny Windows tray tool that flips audio between speakers and Bluetooth headphones with one hotkey")]
+[assembly: AssemblyCompany("Ali Alhumedi")]
+[assembly: AssemblyProduct("EarFlip")]
+[assembly: AssemblyCopyright("Copyright (c) 2026 Ali Alhumedi")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyInformationalVersion("1.1.0")]
+
 static class Devices
 {
     public const string Speakers = "{0.0.0.00000000}.{81f5809c-6c48-4d9d-a509-6edec89d8082}";
