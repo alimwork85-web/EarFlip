@@ -4,6 +4,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Media;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -214,7 +215,6 @@ sealed class TrayApp : Form
     const int ModControlAlt = 0x0003;
     const int ModNoRepeat = 0x4000;
     const int VkF12 = 0x7B;
-
     [DllImport("user32.dll")]
     static extern bool RegisterHotKey(IntPtr hwnd, int id, int modifiers, int key);
     [DllImport("user32.dll")]
@@ -222,21 +222,31 @@ sealed class TrayApp : Form
 
     readonly NotifyIcon tray = new NotifyIcon();
     readonly System.Windows.Forms.Timer poll = new System.Windows.Forms.Timer();
+    ToolStripMenuItem startupItem;
     Icon currentIcon;
     string shownId;
+    int hotMods = ModControlAlt;
+    int hotKey = VkF12;
 
     public TrayApp()
     {
         ShowInTaskbar = false;
+        LoadHotkey();
+
+        startupItem = new ToolStripMenuItem("التشغيل عند بدء ويندوز", null, delegate { ToggleStartup(); });
+        startupItem.Checked = File.Exists(StartupLink);
 
         var menu = new ContextMenuStrip();
+        menu.Items.Add("تبديل الاختصار", null, delegate { ChangeHotkey(); });
+        menu.Items.Add(startupItem);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("خروج", null, delegate { Quit(); });
         tray.ContextMenuStrip = menu;
 
         RefreshTray();
         tray.Visible = true;
 
-        RegisterHotKey(Handle, HotkeyId, ModControlAlt | ModNoRepeat, VkF12);
+        RegisterHotKey(Handle, HotkeyId, hotMods | ModNoRepeat, hotKey);
 
         poll.Interval = 2000;
         // shortcut: polling بدل IMMNotificationClient، يُرقّى إن ظهر بطء
@@ -303,6 +313,135 @@ sealed class TrayApp : Form
         tray.Dispose();
         if (currentIcon != null) currentIcon.Dispose();
         Application.Exit();
+    }
+
+    void ChangeHotkey()
+    {
+        using (var dialog = new HotkeyForm(hotMods, hotKey))
+        {
+            if (dialog.ShowDialog() != DialogResult.OK) return;
+
+            UnregisterHotKey(Handle, HotkeyId);
+            if (RegisterHotKey(Handle, HotkeyId, dialog.Mods | ModNoRepeat, dialog.Key))
+            {
+                hotMods = dialog.Mods;
+                hotKey = dialog.Key;
+                SaveHotkey();
+            }
+            else
+            {
+                // someone else owns that combo: keep the old one instead of running with none
+                RegisterHotKey(Handle, HotkeyId, hotMods | ModNoRepeat, hotKey);
+                SystemSounds.Beep.Play();
+            }
+        }
+    }
+
+    static string StartupLink
+    {
+        get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "EarFlip.lnk"); }
+    }
+
+    void ToggleStartup()
+    {
+        try
+        {
+            string link = StartupLink;
+            if (File.Exists(link))
+            {
+                File.Delete(link);
+            }
+            else
+            {
+                // WScript.Shell via late binding keeps the build reference-free
+                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+                object shell = Activator.CreateInstance(shellType);
+                object shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { link });
+                Type shortcutType = shortcut.GetType();
+                shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { Application.ExecutablePath });
+                shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { Path.GetDirectoryName(Application.ExecutablePath) });
+                shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
+            }
+        }
+        catch (Exception)
+        {
+            SystemSounds.Beep.Play();
+        }
+        startupItem.Checked = File.Exists(StartupLink);
+    }
+
+    void LoadHotkey()
+    {
+        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\EarFlip"))
+        {
+            if (key == null) return;
+            object mods = key.GetValue("Modifiers");
+            object vk = key.GetValue("Key");
+            if (mods is int && vk is int)
+            {
+                hotMods = (int)mods;
+                hotKey = (int)vk;
+            }
+        }
+    }
+
+    void SaveHotkey()
+    {
+        using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\EarFlip"))
+        {
+            key.SetValue("Modifiers", hotMods, RegistryValueKind.DWord);
+            key.SetValue("Key", hotKey, RegistryValueKind.DWord);
+        }
+    }
+}
+
+sealed class HotkeyForm : Form
+{
+    public int Mods;
+    public int Key;
+
+    public HotkeyForm(int mods, int key)
+    {
+        Mods = mods;
+        Key = key;
+        Text = "EarFlip";
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        StartPosition = FormStartPosition.CenterScreen;
+        MinimizeBox = false;
+        MaximizeBox = false;
+        TopMost = true;
+        ClientSize = new Size(320, 80);
+        Controls.Add(new Label
+        {
+            Text = "اضغط الاختصار الجديد (Esc للإلغاء)",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter
+        });
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        Keys key = keyData & Keys.KeyCode;
+        if (key == Keys.Escape)
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+            return true;
+        }
+        if (key == Keys.ControlKey || key == Keys.Menu || key == Keys.ShiftKey || key == Keys.LWin || key == Keys.RWin)
+            return true;
+
+        Keys held = keyData & Keys.Modifiers;
+        if (held == Keys.None) return true; // a bare key would shut normal typing out of the whole desktop
+
+        Mods = 0;
+        if ((held & Keys.Control) != 0) Mods |= 0x0002;
+        if ((held & Keys.Alt) != 0) Mods |= 0x0001;
+        if ((held & Keys.Shift) != 0) Mods |= 0x0004;
+        Key = (int)key;
+        DialogResult = DialogResult.OK;
+        Close();
+        return true;
     }
 }
 
