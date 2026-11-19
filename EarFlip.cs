@@ -452,8 +452,8 @@ sealed class TrayApp : Form
     readonly System.Windows.Forms.Timer poll = new System.Windows.Forms.Timer();
     // ponytail: one timer for the whole blink, no animation framework
     readonly System.Windows.Forms.Timer flash = new System.Windows.Forms.Timer();
-    readonly ToolStripMenuItem speakersItem = new ToolStripMenuItem("سماعة الجهاز");
-    readonly ToolStripMenuItem budsItem = new ToolStripMenuItem("سماعة البلوتوث");
+    readonly ToolStripMenuItem speakersItem = new ToolStripMenuItem(L.T("سماعة الجهاز", "Speakers"));
+    readonly ToolStripMenuItem budsItem = new ToolStripMenuItem(L.T("سماعة البلوتوث", "Bluetooth headphones"));
     ToolStripMenuItem startupItem;
     Icon currentIcon;
     Icon flashIcon;
@@ -469,17 +469,17 @@ sealed class TrayApp : Form
         Devices.Load();
         EnsureStartupLink();
 
-        startupItem = new ToolStripMenuItem("التشغيل عند بدء ويندوز", null, delegate { ToggleStartup(); });
+        startupItem = new ToolStripMenuItem(L.T("التشغيل عند بدء ويندوز", "Run at Windows startup"), null, delegate { ToggleStartup(); });
         startupItem.Checked = File.Exists(StartupLink);
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(speakersItem);
         menu.Items.Add(budsItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("تبديل الاختصار", null, delegate { ChangeHotkey(); });
+        menu.Items.Add(L.T("تبديل الاختصار", "Change shortcut"), null, delegate { ChangeHotkey(); });
         menu.Items.Add(startupItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("خروج", null, delegate { Quit(); });
+        menu.Items.Add(L.T("خروج", "Exit"), null, delegate { Quit(); });
         menu.Opening += delegate { FillDevices(); };
         tray.ContextMenuStrip = menu;
 
@@ -533,7 +533,8 @@ sealed class TrayApp : Form
 
     void Toggle()
     {
-        if (Devices.Speakers == null || Devices.Buds == null) Devices.Ensure();
+        // every time, not only when empty: a headset re-paired since startup has a new id
+        Devices.Ensure();
 
         string id = Devices.CurrentId();
         string target;
@@ -564,7 +565,7 @@ sealed class TrayApp : Form
         }
 
         flashStep = 0;
-        tray.Text = "سماعة البلوتوث غير متصلة";
+        tray.Text = L.T("سماعة البلوتوث غير متصلة", "Bluetooth headphones not connected");
         flash.Interval = 160;
         flash.Start();
     }
@@ -600,7 +601,7 @@ sealed class TrayApp : Form
         {
             if (e.Bluetooth != bluetooth) continue;
             string id = e.Id;
-            var item = new ToolStripMenuItem(e.Name + (e.Active ? "" : " (غير متصل)"), null,
+            var item = new ToolStripMenuItem(e.Name + (e.Active ? "" : L.T(" (غير متصل)", " (disconnected)")), null,
                 delegate { ChooseDevice(bluetooth, id); });
             item.Checked = id == selected;
             parent.DropDownItems.Add(item);
@@ -608,7 +609,7 @@ sealed class TrayApp : Form
         }
         if (added == 0)
         {
-            var none = new ToolStripMenuItem("لا توجد أجهزة");
+            var none = new ToolStripMenuItem(L.T("لا توجد أجهزة", "No devices"));
             none.Enabled = false;
             parent.DropDownItems.Add(none);
         }
@@ -786,7 +787,7 @@ sealed class HotkeyForm : Form
         ClientSize = new Size(320, 80);
         Controls.Add(new Label
         {
-            Text = "اضغط الاختصار الجديد (Esc للإلغاء)",
+            Text = L.T("اضغط الاختصار الجديد (Esc للإلغاء)", "Press the new shortcut (Esc to cancel)"),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter
         });
@@ -816,6 +817,13 @@ sealed class HotkeyForm : Form
         Close();
         return true;
     }
+}
+
+// Arabic when Windows' display language is Arabic, English everywhere else
+static class L
+{
+    static readonly bool Arabic = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ar";
+    public static string T(string ar, string en) { return Arabic ? ar : en; }
 }
 
 static class Program
