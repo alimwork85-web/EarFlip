@@ -252,6 +252,12 @@ sealed class TrayApp : Form
         menu.Items.Add("خروج", null, delegate { Quit(); });
         tray.ContextMenuStrip = menu;
 
+        // left click flips, right click still opens the menu
+        tray.MouseClick += delegate (object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left) Toggle();
+        };
+
         RefreshTray();
         tray.Visible = true;
 
