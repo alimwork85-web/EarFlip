@@ -20,11 +20,13 @@ A tiny replacement for SoundSwitch: no installer, no notifications, no sound, no
 
 - **`Ctrl + Alt + F12`** switches the default playback device between speakers and your Bluetooth headphones — all three Windows roles (console, multimedia, communications) at once.
 - **Tray icon that tells the truth:** a blue headset when the headphones are the active output, an orange speaker otherwise. Hover to see the current device name.
+- **Works on any machine:** the two slots are chosen from the tray menu (*System speaker ▸* / *Bluetooth headset ▸*) and saved under `HKCU\Software\EarFlip`. On first run the app picks the current output as the speaker side and the first Bluetooth headset as the other one; a headset that got re-paired is matched back by name.
+- **Left click the icon to flip**, right click still opens the menu.
 - **Silent by design.** No balloon, no beep, no toast. If the headphones are disconnected, the hotkey simply does nothing.
 - **Watches Windows too:** change the device from Settings and the icon follows within 2 seconds.
-- **Right-click menu:** *Change shortcut* · *Run at Windows startup* · *Exit*.
+- **Right-click menu:** *System speaker* ▸ · *Bluetooth headset* ▸ · *Change shortcut* · *Run at Windows startup* · *Exit*.
 - **Single instance**, and the hotkey is released on exit.
-- **One 24.5 KB exe**, no framework install, no dependencies, no registry clutter (only your chosen shortcut is saved, under `HKCU\Software\EarFlip`).
+- **One small exe**, no framework install, no dependencies, no registry clutter (only your chosen devices and shortcut, under `HKCU\Software\EarFlip`).
 
 ## Screenshots
 
@@ -62,7 +64,10 @@ Windows SmartScreen may warn about an unsigned exe — *More info → Run anyway
 | Action | Result |
 |---|---|
 | `Ctrl + Alt + F12` | Switch output: speakers ⇄ Bluetooth headphones |
+| Left click the tray icon | Same as the hotkey |
 | Tray icon (hover) | Name of the current output device |
+| Right-click → *System speaker ▸* | Pick which device counts as "speakers" (the list shows active and disconnected devices) |
+| Right-click → *Bluetooth headset ▸* | Pick which device counts as "Bluetooth headphones" |
 | Right-click → *Change shortcut* | Press the new combination (needs Ctrl/Alt/Shift); Esc cancels |
 | Right-click → *Run at Windows startup* | Tick/untick autostart (a shortcut in your Startup folder; a stale one is rebuilt on the next launch) |
 | Right-click → *Exit* | Quits and releases the hotkey |
@@ -79,7 +84,7 @@ It compiles `EarFlip.cs` → runs `EarFlip.exe --make-icon` (writes `EarFlip.ico
 
 ## Notes
 
-- The two device IDs are compiled in (they are this machine's speakers and headphones). Pointing it at another pair means editing the two constants at the top of `EarFlip.cs` and rebuilding.
+- Nothing about your hardware is compiled in. The two chosen devices live in `HKCU\Software\EarFlip` (`Speakers`, `SpeakersName`, `Buds`, `BudsName`), together with the shortcut (`Modifiers`, `Key`). Delete the key and the next launch picks the current output plus the first Bluetooth headset again.
 - Global polling instead of `IMMNotificationClient` is a deliberate shortcut; it costs one COM call every 2 seconds.
 - Version resources: *Properties → Details* on the exe shows **Ali Alhumedi** as company/publisher and the current version.
 
@@ -99,10 +104,12 @@ Released by **Ali Alhumedi**. Free to use and modify; keep the credit.
 
 ### المزايا
 - تبديل الجهاز الافتراضي للأدوار الثلاثة (console وmultimedia وcommunications) بضغطة واحدة.
+- **يعمل على أي جهاز:** الجهازان يُختاران من قائمة الـ tray (**سماعة الجهاز ▸** و**سماعة البلوتوث ▸**) ويُحفظان في `HKCU\Software\EarFlip`. عند أول تشغيل يختار التطبيق المخرج الحالي للجانب الأول وأول سماعة بلوتوث للجانب الثاني، والسماعة التي تُقرن من جديد تُطابَق باسمها.
+- **نقرة يسرى** على الأيقونة تبدّل، والنقرة اليمنى تفتح القائمة كما هي.
 - أيقونة في شريط النظام تتبع الحالة: **سماعة زرقاء** حين تكون السماعة هي المخرج، و**مكبّر برتقالي** في غير ذلك، واسم الجهاز الحالي عند التمرير.
 - **صامت تمامًا:** بلا إشعارات وبلا صوت. إن كانت السماعة مفصولة لا يحدث شيء.
 - يتابع تغييرك للجهاز من إعدادات Windows ويحدّث الأيقونة خلال ثانيتين.
-- قائمة يمين: **تبديل الاختصار** · **التشغيل عند بدء ويندوز** · **خروج**.
+- قائمة يمين: **سماعة الجهاز ▸** · **سماعة البلوتوث ▸** · **تبديل الاختصار** · **التشغيل عند بدء ويندوز** · **خروج**.
 - نسخة واحدة فقط تعمل، والاختصار يُحرَّر عند الخروج.
 
 ### الحجم والاستهلاك
@@ -125,7 +132,7 @@ build.cmd
 يستخدم `csc.exe` الموجود في Windows؛ لا SDK ولا حزم.
 
 ### ملاحظة
-معرّفا الجهازين مضمّنان في الكود (مكبّر وسماعة هذا الجهاز). لتغييرهما عدّل الثابتين في أعلى `EarFlip.cs` وأعد البناء.
+لا شيء من عتادك مضمّن في الكود. الجهازان المختاران محفوظان في `HKCU\Software\EarFlip` (القيم `Speakers` و`SpeakersName` و`Buds` و`BudsName`) مع الاختصار (`Modifiers` و`Key`). احذف المفتاح فيختار التشغيل التالي المخرج الحالي وأول سماعة بلوتوث من جديد.
 
 </div>
 

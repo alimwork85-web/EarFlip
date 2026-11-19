@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -20,12 +21,25 @@ using Microsoft.Win32;
 
 static class Devices
 {
-    public const string Speakers = "{0.0.0.00000000}.{81f5809c-6c48-4d9d-a509-6edec89d8082}";
-    public const string Buds = "{0.0.0.00000000}.{d96537a1-4fe0-486f-a805-6fb778567048}";
+    // picked by the user and kept in HKCU\Software\EarFlip: nothing is compiled in any more
+    public static string Speakers;
+    public static string Buds;
+    static string speakersName;
+    static string budsName;
 
     const int Render = 0;
     const int Multimedia = 1;
     const int StateActive = 1;
+    const int StateUnplugged = 8;
+
+    public sealed class Endpoint
+    {
+        public string Id;
+        public string Name;
+        public bool Active;
+        public bool Bluetooth;
+        public bool HandsFree;
+    }
 
     [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
     class MMDeviceEnumerator { }
@@ -33,11 +47,18 @@ static class Devices
     [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IMMDeviceEnumerator
     {
-        int EnumAudioEndpoints(int flow, int stateMask, out IntPtr collection);
+        int EnumAudioEndpoints(int flow, int stateMask, [MarshalAs(UnmanagedType.Interface)] out IMMDeviceCollection collection);
         int GetDefaultAudioEndpoint(int flow, int role, [MarshalAs(UnmanagedType.Interface)] out IMMDevice device);
         int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, [MarshalAs(UnmanagedType.Interface)] out IMMDevice device);
         int RegisterEndpointNotificationCallback(IntPtr client);
         int UnregisterEndpointNotificationCallback(IntPtr client);
+    }
+
+    [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceCollection
+    {
+        int GetCount(out int count);
+        int Item(int index, [MarshalAs(UnmanagedType.Interface)] out IMMDevice device);
     }
 
     [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -116,26 +137,168 @@ static class Devices
         finally { Marshal.ReleaseComObject(policy); }
     }
 
-    public static string NameOf(string id)
+    // active plus unplugged, so a paired-but-disconnected Bluetooth headset still shows up
+    public static List<Endpoint> List()
     {
-        if (id == null) return "EarFlip";
-        int brace = id.LastIndexOf('{');
-        if (brace >= 0)
+        var list = new List<Endpoint>();
+        var en = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+        IMMDeviceCollection col = null;
+        try
         {
-            string key = @"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render\" + id.Substring(brace) + @"\Properties";
-            using (RegistryKey k = Registry.LocalMachine.OpenSubKey(key))
+            if (en.EnumAudioEndpoints(Render, StateActive | StateUnplugged, out col) != 0 || col == null) return list;
+            int count;
+            if (col.GetCount(out count) != 0) return list;
+            for (int i = 0; i < count; i++)
             {
-                if (k != null)
+                IMMDevice dev;
+                if (col.Item(i, out dev) != 0 || dev == null) continue;
+                try
                 {
-                    string friendly = k.GetValue("{a45c254e-df1c-4efd-8020-67d146a850e0},2") as string;
-                    string desc = k.GetValue("{b3f8fa53-0004-438e-9003-51a46e139bfc},6") as string;
-                    if (!string.IsNullOrEmpty(desc) && desc != friendly) return friendly + " (" + desc + ")";
-                    if (!string.IsNullOrEmpty(friendly)) return friendly;
-                    if (!string.IsNullOrEmpty(desc)) return desc;
+                    string id;
+                    if (dev.GetId(out id) != 0 || string.IsNullOrEmpty(id)) continue;
+                    int state;
+                    bool bluetooth, handsFree;
+                    BluetoothFlags(id, out bluetooth, out handsFree);
+                    list.Add(new Endpoint
+                    {
+                        Id = id,
+                        Name = NameOf(id),
+                        Active = dev.GetState(out state) == 0 && state == StateActive,
+                        Bluetooth = bluetooth,
+                        HandsFree = handsFree
+                    });
+                }
+                finally { Marshal.ReleaseComObject(dev); }
+            }
+            return list;
+        }
+        catch (COMException) { return list; }
+        finally
+        {
+            if (col != null) Marshal.ReleaseComObject(col);
+            Marshal.ReleaseComObject(en);
+        }
+    }
+
+    public static void Load()
+    {
+        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\EarFlip"))
+        {
+            if (key != null)
+            {
+                Speakers = key.GetValue("Speakers") as string;
+                speakersName = key.GetValue("SpeakersName") as string;
+                Buds = key.GetValue("Buds") as string;
+                budsName = key.GetValue("BudsName") as string;
+            }
+        }
+        Ensure();
+    }
+
+    public static void Save()
+    {
+        using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\EarFlip"))
+        {
+            key.SetValue("Speakers", Speakers ?? "", RegistryValueKind.String);
+            key.SetValue("SpeakersName", NameOf(Speakers), RegistryValueKind.String);
+            key.SetValue("Buds", Buds ?? "", RegistryValueKind.String);
+            key.SetValue("BudsName", NameOf(Buds), RegistryValueKind.String);
+        }
+    }
+
+    // fills an empty slot (first run) or one whose saved device Windows no longer lists
+    public static void Ensure()
+    {
+        List<Endpoint> list = List();
+
+        // a re-paired headset gets a new id: match it back by its saved name
+        string speakers = Resolve(list, Speakers, speakersName);
+        string buds = Resolve(list, Buds, budsName);
+
+        if (speakers == null)
+        {
+            Endpoint current = Find(list, CurrentId());
+            if (current != null && current.Active && !current.Bluetooth) speakers = current.Id;
+            if (speakers == null)
+            {
+                Endpoint first = list.Find(delegate (Endpoint e) { return e.Active && !e.Bluetooth; });
+                if (first != null) speakers = first.Id;
+            }
+        }
+        if (buds == null)
+        {
+            Endpoint first = list.Find(delegate (Endpoint e) { return e.Bluetooth && !e.HandsFree; });
+            if (first != null) buds = first.Id;
+        }
+
+        if (speakers == Speakers && buds == Buds) return;
+        Speakers = speakers;
+        Buds = buds;
+        Save();
+    }
+
+    static Endpoint Find(List<Endpoint> list, string id)
+    {
+        if (string.IsNullOrEmpty(id)) return null;
+        return list.Find(delegate (Endpoint e) { return e.Id == id; });
+    }
+
+    static string Resolve(List<Endpoint> list, string id, string savedName)
+    {
+        if (Find(list, id) != null) return id;
+        if (string.IsNullOrEmpty(savedName)) return null;
+        Endpoint byName = list.Find(delegate (Endpoint e) { return e.Name == savedName; });
+        return byName == null ? null : byName.Id;
+    }
+
+    static RegistryKey PropertiesKey(string id)
+    {
+        if (id == null) return null;
+        int brace = id.LastIndexOf('{');
+        if (brace < 0) return null;
+        string key = @"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render\" + id.Substring(brace) + @"\Properties";
+        return Registry.LocalMachine.OpenSubKey(key);
+    }
+
+    // Windows stores the device interface path in the properties: BTHENUM is A2DP, BTHHFENUM is hands-free
+    static void BluetoothFlags(string id, out bool bluetooth, out bool handsFree)
+    {
+        bluetooth = false;
+        handsFree = false;
+        using (RegistryKey props = PropertiesKey(id))
+        {
+            if (props == null) return;
+            foreach (string name in props.GetValueNames())
+            {
+                string value = props.GetValue(name) as string;
+                if (value == null) continue;
+                if (value.IndexOf("BTHHFENUM", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    handsFree = true;
+                    bluetooth = true;
+                }
+                else if (value.IndexOf("BTHENUM", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    bluetooth = true;
                 }
             }
         }
-        return id == Buds ? "Headphones (Ali's Buds4 Pro)" : "Speakers (Senary Audio)";
+    }
+
+    public static string NameOf(string id)
+    {
+        using (RegistryKey k = PropertiesKey(id))
+        {
+            if (k != null)
+            {
+                string friendly = k.GetValue("{a45c254e-df1c-4efd-8020-67d146a850e0},2") as string;
+                string desc = k.GetValue("{b3f8fa53-0004-438e-9003-51a46e139bfc},6") as string;
+                if (!string.IsNullOrEmpty(desc) && desc != friendly) return friendly + " (" + desc + ")";
+                if (!string.IsNullOrEmpty(friendly)) return friendly;
+                if (!string.IsNullOrEmpty(desc)) return desc;
+            }
+        }
+        return "EarFlip";
     }
 }
 
@@ -230,6 +393,8 @@ sealed class TrayApp : Form
 
     readonly NotifyIcon tray = new NotifyIcon();
     readonly System.Windows.Forms.Timer poll = new System.Windows.Forms.Timer();
+    readonly ToolStripMenuItem speakersItem = new ToolStripMenuItem("سماعة الجهاز");
+    readonly ToolStripMenuItem budsItem = new ToolStripMenuItem("سماعة البلوتوث");
     ToolStripMenuItem startupItem;
     Icon currentIcon;
     string shownId;
@@ -240,16 +405,21 @@ sealed class TrayApp : Form
     {
         ShowInTaskbar = false;
         LoadHotkey();
+        Devices.Load();
         EnsureStartupLink();
 
         startupItem = new ToolStripMenuItem("التشغيل عند بدء ويندوز", null, delegate { ToggleStartup(); });
         startupItem.Checked = File.Exists(StartupLink);
 
         var menu = new ContextMenuStrip();
+        menu.Items.Add(speakersItem);
+        menu.Items.Add(budsItem);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("تبديل الاختصار", null, delegate { ChangeHotkey(); });
         menu.Items.Add(startupItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("خروج", null, delegate { Quit(); });
+        menu.Opening += delegate { FillDevices(); };
         tray.ContextMenuStrip = menu;
 
         // left click flips, right click still opens the menu
@@ -284,19 +454,53 @@ sealed class TrayApp : Form
 
     void Toggle()
     {
+        if (Devices.Speakers == null || Devices.Buds == null) Devices.Ensure();
+
         string id = Devices.CurrentId();
-        if (id == Devices.Speakers)
+        string target;
+        if (id == Devices.Buds) target = Devices.Speakers;
+        else if (Devices.Buds != null && Devices.IsActive(Devices.Buds)) target = Devices.Buds;
+        else target = id == Devices.Speakers ? null : Devices.Speakers;
+
+        if (target == null) return; // silent on purpose: the app must never make a sound
+        Devices.SetDefault(target);
+        RefreshTray();
+    }
+
+    void FillDevices()
+    {
+        FillDeviceMenu(speakersItem, false, Devices.Speakers);
+        FillDeviceMenu(budsItem, true, Devices.Buds);
+    }
+
+    void FillDeviceMenu(ToolStripMenuItem parent, bool bluetooth, string selected)
+    {
+        parent.DropDownItems.Clear();
+        int added = 0;
+        foreach (Devices.Endpoint e in Devices.List())
         {
-            if (!Devices.IsActive(Devices.Buds))
-            {
-                return; // silent on purpose: the app must never make a sound
-            }
-            Devices.SetDefault(Devices.Buds);
+            if (e.Bluetooth != bluetooth) continue;
+            string id = e.Id;
+            var item = new ToolStripMenuItem(e.Name + (e.Active ? "" : " (غير متصل)"), null,
+                delegate { ChooseDevice(bluetooth, id); });
+            item.Checked = id == selected;
+            parent.DropDownItems.Add(item);
+            added++;
         }
-        else
+        if (added == 0)
         {
-            Devices.SetDefault(Devices.Speakers);
+            var none = new ToolStripMenuItem("لا توجد أجهزة");
+            none.Enabled = false;
+            parent.DropDownItems.Add(none);
         }
+    }
+
+    void ChooseDevice(bool buds, string id)
+    {
+        if (buds) Devices.Buds = id;
+        else Devices.Speakers = id;
+        Devices.Save();
+        shownId = null; // force the icon and the tooltip to follow the new pair
         RefreshTray();
     }
 
