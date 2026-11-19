@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="docs/icon.png" width="112" alt="EarFlip icon" />
-
-# EarFlip
+<img src="docs/banner.svg" width="100%" alt="EarFlip: flip Windows audio between speakers and headphones with one key" />
 
 **One hotkey or one click flips your Windows audio between speakers and headphones.**<br/>
 Tiny, silent, no installer, no settings window.
@@ -35,7 +33,7 @@ Tiny, silent, no installer, no settings window.
 
 | Tray menu | Change shortcut |
 |---|---|
-| <img src="docs/menu.png" width="260" alt="EarFlip tray menu" /> | <img src="docs/hotkey-dialog.png" width="360" alt="Change shortcut dialog" /> |
+| <img src="docs/menu.png" width="286" alt="EarFlip tray menu" /> | <img src="docs/hotkey-dialog.png" width="360" alt="Change shortcut dialog" /> |
 
 | Headphones active | Speakers active |
 |---|---|
@@ -115,6 +113,10 @@ It compiles `EarFlip.cs`, writes `EarFlip.ico` with `EarFlip.exe --make-icon`, t
 - **يتبع ويندوز فورًا** عبر إشعارات الأجهزة، بلا فحص دوري.
 - **بلغتك:** القائمة عربية على ويندوز العربي، وإنجليزية في غيره.
 - **يحفظ اختيارك:** السماعة المعاد إقرانها يتعرف عليها باسمها، وجهاز USB أو HDMI المفصول يبقى في مكانه.
+
+### القائمة
+
+<img src="docs/menu-ar.png" width="266" alt="قائمة EarFlip بالعربية" />
 
 ### التركيب
 
