@@ -14,7 +14,7 @@ using Microsoft.Win32;
 [assembly: AssemblyDescription("Tiny Windows tray tool that flips audio between speakers and Bluetooth headphones with one hotkey")]
 [assembly: AssemblyCompany("Ali Alhumedi")]
 [assembly: AssemblyProduct("EarFlip")]
-[assembly: AssemblyCopyright("Copyright (c) 2026 Ali Alhumedi")]
+[assembly: AssemblyCopyright("© 2026 Ali Alhumedi")]
 [assembly: AssemblyVersion("1.4.0.0")]
 [assembly: AssemblyFileVersion("1.4.0.0")]
 [assembly: AssemblyInformationalVersion("1.4.0")]
