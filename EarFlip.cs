@@ -393,10 +393,14 @@ sealed class TrayApp : Form
 
     readonly NotifyIcon tray = new NotifyIcon();
     readonly System.Windows.Forms.Timer poll = new System.Windows.Forms.Timer();
+    // ponytail: one timer for the whole blink, no animation framework
+    readonly System.Windows.Forms.Timer flash = new System.Windows.Forms.Timer();
     readonly ToolStripMenuItem speakersItem = new ToolStripMenuItem("سماعة الجهاز");
     readonly ToolStripMenuItem budsItem = new ToolStripMenuItem("سماعة البلوتوث");
     ToolStripMenuItem startupItem;
     Icon currentIcon;
+    Icon flashIcon;
+    int flashStep;
     string shownId;
     int hotMods = ModControlAlt;
     int hotKey = VkF12;
@@ -437,6 +441,8 @@ sealed class TrayApp : Form
         // shortcut: polling بدل IMMNotificationClient، يُرقّى إن ظهر بطء
         poll.Tick += delegate { RefreshTray(); };
         poll.Start();
+
+        flash.Tick += FlashTick;
     }
 
     // tray-only app: the message loop needs a window, but the window must never show
@@ -462,8 +468,48 @@ sealed class TrayApp : Form
         else if (Devices.Buds != null && Devices.IsActive(Devices.Buds)) target = Devices.Buds;
         else target = id == Devices.Speakers ? null : Devices.Speakers;
 
-        if (target == null) return; // silent on purpose: the app must never make a sound
+        if (target == null)
+        {
+            // silent on purpose, but the icon says why: three grey blinks
+            FlashFailure();
+            return;
+        }
         Devices.SetDefault(target);
+        RefreshTray();
+    }
+
+    // grey copy of the icon on screen, blinked three times, tooltip explains it, no sound
+    void FlashFailure()
+    {
+        int size = Math.Max(16, SystemInformation.SmallIconSize.Width);
+        using (Bitmap bmp = shownId == Devices.Buds ? Art.Headphones(size) : Art.Speaker(size))
+        using (Bitmap dim = new Bitmap(size, size, PixelFormat.Format32bppArgb))
+        {
+            using (Graphics g = Graphics.FromImage(dim)) ControlPaint.DrawImageDisabled(g, bmp, 0, 0, Color.Transparent);
+            if (flashIcon != null) flashIcon.Dispose();
+            flashIcon = Art.ToIcon(dim);
+        }
+
+        flashStep = 0;
+        tray.Text = "سماعة البلوتوث غير متصلة";
+        flash.Interval = 160;
+        flash.Start();
+    }
+
+    void FlashTick(object sender, EventArgs e)
+    {
+        flashStep++;
+        tray.Icon = flashStep % 2 == 1 ? flashIcon : currentIcon;
+        if (flashStep < 6) return;
+
+        flash.Stop();
+        if (flashIcon != null)
+        {
+            flashIcon.Dispose();
+            flashIcon = null;
+        }
+        tray.Icon = currentIcon;
+        shownId = null; // force the icon and the tooltip back to the real device
         RefreshTray();
     }
 
@@ -506,6 +552,7 @@ sealed class TrayApp : Form
 
     void RefreshTray()
     {
+        if (flash.Enabled) return; // a device change must not cut the blink short
         string id = Devices.CurrentId();
         if (id == shownId) return;
         shownId = id;
@@ -527,6 +574,8 @@ sealed class TrayApp : Form
     {
         UnregisterHotKey(Handle, HotkeyId);
         poll.Stop();
+        flash.Stop();
+        if (flashIcon != null) flashIcon.Dispose();
         tray.Visible = false;
         tray.Dispose();
         if (currentIcon != null) currentIcon.Dispose();
