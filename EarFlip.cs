@@ -15,9 +15,9 @@ using Microsoft.Win32;
 [assembly: AssemblyCompany("Ali Alhumedi")]
 [assembly: AssemblyProduct("EarFlip")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Ali Alhumedi")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
-[assembly: AssemblyInformationalVersion("1.3.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
+[assembly: AssemblyInformationalVersion("1.4.0")]
 
 static class Devices
 {
@@ -302,10 +302,70 @@ static class Devices
 
     static string Resolve(List<Endpoint> list, string id, string savedName)
     {
+        // a device that is only unplugged right now (USB, HDMI) keeps its slot: only an empty slot is auto-filled
+        string keep = string.IsNullOrEmpty(id) ? null : id;
         if (Find(list, id) != null) return id;
-        if (string.IsNullOrEmpty(savedName)) return null;
+        if (string.IsNullOrEmpty(savedName)) return keep;
         Endpoint byName = list.Find(delegate (Endpoint e) { return e.Name == savedName; });
-        return byName == null ? null : byName.Id;
+        return byName == null ? keep : byName.Id;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct DevInfo
+    {
+        public int Size;
+        public Guid ClassGuid;
+        public int DevInst;
+        public IntPtr Reserved;
+    }
+
+    [DllImport("setupapi.dll", CharSet = CharSet.Unicode)]
+    static extern IntPtr SetupDiGetClassDevsW(IntPtr classGuid, string enumerator, IntPtr hwnd, int flags);
+    [DllImport("setupapi.dll")]
+    static extern bool SetupDiEnumDeviceInfo(IntPtr set, int index, ref DevInfo info);
+    [DllImport("setupapi.dll")]
+    static extern bool SetupDiGetDevicePropertyW(IntPtr set, ref DevInfo info, ref PropertyKey key, out int type, byte[] buffer, int size, out int required, int flags);
+    [DllImport("setupapi.dll")]
+    static extern bool SetupDiDestroyDeviceInfoList(IntPtr set);
+
+    static readonly Guid ContainerFmt = new Guid("8c7ed206-3f8a-4827-b3ab-ae9e1faefc6c");
+    static readonly Guid BatteryFmt = new Guid("104ea319-6ee2-4701-bd47-8ddbf425bbe5");
+    static readonly Guid PcContainer = new Guid("00000000-0000-0000-ffff-ffffffffffff");
+
+    // the battery level Windows itself shows in Settings, or -1. It lives on a sibling device node
+    // (e.g. "Hands-Free AG"), found through the container id it shares with the audio endpoint.
+    public static int Battery(string id)
+    {
+        Guid container;
+        using (RegistryKey k = PropertiesKey(id))
+        {
+            byte[] raw = k == null ? null : k.GetValue("{8c7ed206-3f8a-4827-b3ab-ae9e1faefc6c},2") as byte[];
+            if (raw == null || raw.Length < 24) return -1;
+            byte[] g = new byte[16];
+            Array.Copy(raw, 8, g, 0, 16); // 8-byte PROPVARIANT header, then the GUID
+            container = new Guid(g);
+        }
+        if (container == Guid.Empty || container == PcContainer) return -1; // built-in devices have no battery
+
+        PropertyKey containerKey = new PropertyKey { FormatId = ContainerFmt, PropertyId = 2 };
+        PropertyKey batteryKey = new PropertyKey { FormatId = BatteryFmt, PropertyId = 2 };
+        IntPtr set = SetupDiGetClassDevsW(IntPtr.Zero, null, IntPtr.Zero, 0x2 | 0x4); // present, all classes
+        if (set == new IntPtr(-1)) return -1;
+        try
+        {
+            DevInfo info = new DevInfo { Size = Marshal.SizeOf(typeof(DevInfo)) };
+            byte[] buf = new byte[16];
+            int type, required;
+            for (int i = 0; SetupDiEnumDeviceInfo(set, i, ref info); i++)
+            {
+                if (!SetupDiGetDevicePropertyW(set, ref info, ref containerKey, out type, buf, 16, out required, 0)) continue;
+                if (new Guid(buf) != container) continue;
+                if (SetupDiGetDevicePropertyW(set, ref info, ref batteryKey, out type, buf, 16, out required, 0) && buf[0] <= 100)
+                    return buf[0];
+            }
+        }
+        finally { SetupDiDestroyDeviceInfoList(set); }
+        return -1;
     }
 
     static RegistryKey PropertiesKey(string id)
@@ -450,8 +510,13 @@ sealed class TrayApp : Form
 
     readonly NotifyIcon tray = new NotifyIcon();
     readonly System.Windows.Forms.Timer poll = new System.Windows.Forms.Timer();
-    // ponytail: one timer for the whole blink, no animation framework
+    // one timer for the whole blink
     readonly System.Windows.Forms.Timer flash = new System.Windows.Forms.Timer();
+    // headsets report their battery every few minutes, so a slow check is enough for the red dot
+    readonly System.Windows.Forms.Timer batteryTimer = new System.Windows.Forms.Timer();
+    const int LowBattery = 20;
+    int battery = -1;
+    int batteryReadAt;
     readonly ToolStripMenuItem speakersItem = new ToolStripMenuItem(L.T("سماعة الجهاز", "Speakers"));
     readonly ToolStripMenuItem budsItem = new ToolStripMenuItem(L.T("سماعة البلوتوث", "Bluetooth headphones"));
     ToolStripMenuItem startupItem;
@@ -497,12 +562,17 @@ sealed class TrayApp : Form
         // Windows pushes device changes now; polling only if the COM callback refuses to register
         if (!Devices.Watch(OnDevicesChanged))
         {
-            poll.Interval = 2000; // ponytail: fallback only — one COM call every 2 s
+            poll.Interval = 2000; // fallback only: one COM call every 2 s
             poll.Tick += delegate { RefreshTray(); };
             poll.Start();
         }
 
         flash.Tick += FlashTick;
+
+        tray.MouseMove += delegate { CheckBattery(true); };
+        batteryTimer.Interval = 120000;
+        batteryTimer.Tick += delegate { CheckBattery(false); };
+        batteryTimer.Start();
     }
 
     // tray-only app: the message loop needs a window, but the window must never show
@@ -565,7 +635,9 @@ sealed class TrayApp : Form
         }
 
         flashStep = 0;
-        tray.Text = L.T("سماعة البلوتوث غير متصلة", "Bluetooth headphones not connected");
+        string missing = Devices.Buds == null ? L.T("الجهاز الثاني", "Second device") : Devices.NameOf(Devices.Buds);
+        string why = missing + L.T(" غير متصل", " not connected");
+        tray.Text = why.Length > 63 ? why.Substring(0, 63) : why;
         flash.Interval = 160;
         flash.Start();
     }
@@ -597,15 +669,20 @@ sealed class TrayApp : Form
     {
         parent.DropDownItems.Clear();
         int added = 0;
-        foreach (Devices.Endpoint e in Devices.List())
+        List<Devices.Endpoint> all = Devices.List();
+        // every device is offered (USB headset, HDMI...); the matching kind is listed first
+        for (int pass = 0; pass < 2; pass++)
         {
-            if (e.Bluetooth != bluetooth) continue;
-            string id = e.Id;
-            var item = new ToolStripMenuItem(e.Name + (e.Active ? "" : L.T(" (غير متصل)", " (disconnected)")), null,
-                delegate { ChooseDevice(bluetooth, id); });
-            item.Checked = id == selected;
-            parent.DropDownItems.Add(item);
-            added++;
+            foreach (Devices.Endpoint e in all)
+            {
+                if ((e.Bluetooth == bluetooth) != (pass == 0)) continue;
+                string id = e.Id;
+                var item = new ToolStripMenuItem(e.Name + (e.Active ? "" : L.T(" (غير متصل)", " (disconnected)")), null,
+                    delegate { ChooseDevice(bluetooth, id); });
+                item.Checked = id == selected;
+                parent.DropDownItems.Add(item);
+                added++;
+            }
         }
         if (added == 0)
         {
@@ -631,17 +708,46 @@ sealed class TrayApp : Form
         if (id == shownId) return;
         shownId = id;
 
+        battery = Devices.Battery(id);
+        batteryReadAt = Environment.TickCount;
+
         int size = Math.Max(16, SystemInformation.SmallIconSize.Width);
         using (Bitmap bmp = id == Devices.Buds ? Art.Headphones(size) : Art.Speaker(size))
         {
+            if (battery >= 0 && battery < LowBattery)
+            {
+                // red dot, bottom right: the battery is low
+                int d = Math.Max(5, size * 3 / 8);
+                using (Graphics g = Graphics.FromImage(bmp))
+                using (Brush red = new SolidBrush(Color.FromArgb(232, 17, 35)))
+                {
+                    g.SmoothingMode = SmoothingMode.AntiAlias;
+                    g.FillEllipse(red, size - d, size - d, d - 1, d - 1);
+                }
+            }
             Icon icon = Art.ToIcon(bmp);
             if (currentIcon != null) currentIcon.Dispose();
             currentIcon = icon;
             tray.Icon = icon;
         }
 
-        string text = Devices.NameOf(id);
-        tray.Text = text.Length > 63 ? text.Substring(0, 63) : text;
+        // the name is cut, never the percentage
+        string name = Devices.NameOf(id);
+        string level = battery >= 0 ? " · " + battery.ToString(System.Globalization.CultureInfo.InvariantCulture) + "%" : "";
+        if (name.Length + level.Length > 63) name = name.Substring(0, 63 - level.Length);
+        tray.Text = name + level;
+    }
+
+    // re-read the battery on hover and every few minutes; redraw only when it changed
+    void CheckBattery(bool throttle)
+    {
+        if (throttle && unchecked(Environment.TickCount - batteryReadAt) < 10000) return;
+        if (flash.Enabled) return;
+        int now = Devices.Battery(shownId);
+        batteryReadAt = Environment.TickCount;
+        if (now == battery) return;
+        shownId = null;
+        RefreshTray();
     }
 
     void Quit()
@@ -650,6 +756,7 @@ sealed class TrayApp : Form
         UnregisterHotKey(Handle, HotkeyId);
         poll.Stop();
         flash.Stop();
+        batteryTimer.Stop();
         if (flashIcon != null) flashIcon.Dispose();
         tray.Visible = false;
         tray.Dispose();

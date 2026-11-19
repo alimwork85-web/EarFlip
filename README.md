@@ -10,8 +10,8 @@ A tiny replacement for SoundSwitch: no installer, no notifications, no sound, no
 [![Release](https://img.shields.io/github/v/release/alimwork85-web/EarFlip?label=release&color=0aa2ff)](https://github.com/alimwork85-web/EarFlip/releases/latest)
 [![Build](https://github.com/alimwork85-web/EarFlip/actions/workflows/build.yml/badge.svg)](https://github.com/alimwork85-web/EarFlip/actions/workflows/build.yml)
 ![Platform](https://img.shields.io/badge/platform-Windows%2011%20%7C%2010-lightgrey)
-![Size](https://img.shields.io/badge/exe-32%20KB-brightgreen)
-![RAM](https://img.shields.io/badge/RAM-~45%20MB-yellow)
+![Size](https://img.shields.io/badge/exe-34.5%20KB-brightgreen)
+![RAM](https://img.shields.io/badge/RAM-~47%20MB-yellow)
 ![CPU](https://img.shields.io/badge/CPU-idle%20%E2%89%A40.01%25-orange)
 
 ---
@@ -19,12 +19,12 @@ A tiny replacement for SoundSwitch: no installer, no notifications, no sound, no
 ## Features
 
 - **`Ctrl + Alt + F12`** switches the default playback device between speakers and your Bluetooth headphones — all three Windows roles (console, multimedia, communications) at once.
-- **Tray icon that tells the truth:** a blue headset when the headphones are the active output, an orange speaker otherwise. Hover to see the current device name.
+- **Tray icon that tells the truth:** a blue headset when the headphones are the active output, an orange speaker otherwise. Hover to see the current device name and, when Windows knows it, the battery level (e.g. `Headphones (Buds) · 66%`). A red dot appears on the icon below 20%.
 - **Works on any machine:** the two slots are chosen from the tray menu (*System speaker ▸* / *Bluetooth headset ▸*) and saved under `HKCU\Software\EarFlip`. On first run the app picks the current output as the speaker side and the first Bluetooth headset as the other one; a headset that got re-paired is matched back by name.
 - **Left click the icon to flip**, right click still opens the menu.
 - **Silent by design.** No balloon, no beep, no toast. If the headphones are disconnected, the icon blinks grey three times instead of doing nothing.
 - **Watches Windows too:** change the device from Settings and the icon reacts at once — device notifications, not polling. The 2 s poll only runs if Windows refuses the callback.
-- **Right-click menu:** *Speakers* ▸ · *Bluetooth headphones* ▸ · *Change shortcut* · *Run at Windows startup* · *Exit*. The menu is in Arabic when Windows is in Arabic, English otherwise.
+- **Right-click menu:** *Speakers* ▸ · *Bluetooth headphones* ▸ · *Change shortcut* · *Run at Windows startup* · *Exit*. Each submenu lists every output (USB headsets and HDMI too), the matching kind first; an unplugged device keeps its slot. The menu is in Arabic when Windows is in Arabic, English otherwise.
 - **Single instance**, and the hotkey is released on exit.
 - **One small exe**, no framework install, no dependencies, no registry clutter (only your chosen devices and shortcut, under `HKCU\Software\EarFlip`).
 
@@ -40,14 +40,14 @@ A tiny replacement for SoundSwitch: no installer, no notifications, no sound, no
 
 ## Resource usage
 
-Measured on Windows 11 with the released `EarFlip.exe` (1.3.0):
+Measured on Windows 11 with the released `EarFlip.exe` (1.4.0):
 
 | Metric | Value |
 |---|---|
-| Executable size | **32 KB** (32,768 bytes) |
-| Working set (RAM) | **~45 MB** (private ~26 MB) |
+| Executable size | **34.5 KB** (35,328 bytes) |
+| Working set (RAM) | **~47 MB** (private ~26 MB) |
 | CPU while idle | **0.00 s over 15 s** of sampling — below 0.01% of one core |
-| Threads | 12 |
+| Threads | 15 |
 | Background polling | **none** — an `IMMNotificationClient` callback; a 2000 ms poll only if Windows refuses to register it |
 | Dependencies | none — in-box .NET Framework 4.x only |
 
@@ -106,6 +106,7 @@ Released by **Ali Alhumedi**. Free to use and modify; keep the credit.
 - تبديل الجهاز الافتراضي للأدوار الثلاثة (console وmultimedia وcommunications) بضغطة واحدة.
 - **يعمل على أي جهاز:** الجهازان يُختاران من قائمة الـ tray (**سماعة الجهاز ▸** و**سماعة البلوتوث ▸**) ويُحفظان في `HKCU\Software\EarFlip`. عند أول تشغيل يختار التطبيق المخرج الحالي للجانب الأول وأول سماعة بلوتوث للجانب الثاني، والسماعة التي تُقرن من جديد تُطابَق باسمها.
 - **نقرة يسرى** على الأيقونة تبدّل، والنقرة اليمنى تفتح القائمة كما هي.
+- **البطارية في التلميح:** مرّر المؤشر على الأيقونة لترى اسم الجهاز ونسبة بطاريته إن كان ويندوز يعرفها، ونقطة حمراء على الأيقونة تحت 20%.
 - أيقونة في شريط النظام تتبع الحالة: **سماعة زرقاء** حين تكون السماعة هي المخرج، و**مكبّر برتقالي** في غير ذلك، واسم الجهاز الحالي عند التمرير.
 - **صامت تمامًا:** بلا إشعارات وبلا صوت. إن كانت السماعة مفصولة تومض الأيقونة رمادية ثلاث مرات بدل ألا يحدث شيء.
 - يتابع تغييرك للجهاز من إعدادات Windows فورًا عبر إشعارات النظام لا بالاستطلاع، ولا يعود للاستطلاع كل ثانيتين إلا إن رفض Windows تسجيل الإشعار.
@@ -115,8 +116,8 @@ Released by **Ali Alhumedi**. Free to use and modify; keep the credit.
 ### الحجم والاستهلاك
 | القياس | القيمة |
 |---|---|
-| حجم الملف التنفيذي | **32 كيلوبايت** |
-| الذاكرة عند التشغيل | **~45 ميجابايت** |
+| حجم الملف التنفيذي | **34.5 كيلوبايت** |
+| الذاكرة عند التشغيل | **~47 ميجابايت** |
 | المعالج في وضع السكون | **أقل من 0.01%** من نواة واحدة |
 | الاعتماديات | لا شيء — .NET Framework الموجود في Windows |
 
