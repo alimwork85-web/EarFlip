@@ -50,8 +50,65 @@ static class Devices
         int EnumAudioEndpoints(int flow, int stateMask, [MarshalAs(UnmanagedType.Interface)] out IMMDeviceCollection collection);
         int GetDefaultAudioEndpoint(int flow, int role, [MarshalAs(UnmanagedType.Interface)] out IMMDevice device);
         int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, [MarshalAs(UnmanagedType.Interface)] out IMMDevice device);
-        int RegisterEndpointNotificationCallback(IntPtr client);
-        int UnregisterEndpointNotificationCallback(IntPtr client);
+        int RegisterEndpointNotificationCallback([MarshalAs(UnmanagedType.Interface)] IMMNotificationClient client);
+        int UnregisterEndpointNotificationCallback([MarshalAs(UnmanagedType.Interface)] IMMNotificationClient client);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PropertyKey
+    {
+        public Guid FormatId;
+        public int PropertyId;
+    }
+
+    // vtable order matters: these five are the whole interface
+    [Guid("7991EEC9-7E89-4D85-8390-6C703CEC60C0"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMNotificationClient
+    {
+        int OnDeviceStateChanged([MarshalAs(UnmanagedType.LPWStr)] string deviceId, int newState);
+        int OnDeviceAdded([MarshalAs(UnmanagedType.LPWStr)] string deviceId);
+        int OnDeviceRemoved([MarshalAs(UnmanagedType.LPWStr)] string deviceId);
+        int OnDefaultDeviceChanged(int flow, int role, [MarshalAs(UnmanagedType.LPWStr)] string defaultDeviceId);
+        int OnPropertyValueChanged([MarshalAs(UnmanagedType.LPWStr)] string deviceId, PropertyKey key);
+    }
+
+    public delegate void ChangedHandler();
+
+    // Windows calls these on its own COM thread: the handler only raises an event, nothing else
+    sealed class DeviceNotifier : IMMNotificationClient
+    {
+        readonly ChangedHandler changed;
+        public DeviceNotifier(ChangedHandler changed) { this.changed = changed; }
+
+        public int OnDeviceStateChanged(string deviceId, int newState) { changed(); return 0; }
+        public int OnDeviceAdded(string deviceId) { changed(); return 0; }
+        public int OnDeviceRemoved(string deviceId) { changed(); return 0; }
+        public int OnDefaultDeviceChanged(int flow, int role, string defaultDeviceId) { changed(); return 0; }
+        public int OnPropertyValueChanged(string deviceId, PropertyKey key) { changed(); return 0; }
+    }
+
+    // static, so neither the enumerator nor the callback object can be collected while registered
+    static IMMDeviceEnumerator watcher;
+    static DeviceNotifier notifier;
+
+    public static bool Watch(ChangedHandler onChanged)
+    {
+        notifier = new DeviceNotifier(onChanged);
+        watcher = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+        if (watcher.RegisterEndpointNotificationCallback(notifier) == 0) return true;
+        Unwatch();
+        return false;
+    }
+
+    public static void Unwatch()
+    {
+        if (watcher != null && notifier != null) watcher.UnregisterEndpointNotificationCallback(notifier);
+        notifier = null;
+        if (watcher != null)
+        {
+            Marshal.ReleaseComObject(watcher);
+            watcher = null;
+        }
     }
 
     [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -437,10 +494,13 @@ sealed class TrayApp : Form
 
         RegisterHotKey(Handle, HotkeyId, hotMods | ModNoRepeat, hotKey);
 
-        poll.Interval = 2000;
-        // shortcut: polling بدل IMMNotificationClient، يُرقّى إن ظهر بطء
-        poll.Tick += delegate { RefreshTray(); };
-        poll.Start();
+        // Windows pushes device changes now; polling only if the COM callback refuses to register
+        if (!Devices.Watch(OnDevicesChanged))
+        {
+            poll.Interval = 2000; // ponytail: fallback only — one COM call every 2 s
+            poll.Tick += delegate { RefreshTray(); };
+            poll.Start();
+        }
 
         flash.Tick += FlashTick;
     }
@@ -456,6 +516,19 @@ sealed class TrayApp : Form
     {
         if (m.Msg == WmHotkey && m.WParam.ToInt32() == HotkeyId) Toggle();
         base.WndProc(ref m);
+    }
+
+    // called on a COM thread by Windows: hop to the UI thread before touching the tray
+    void OnDevicesChanged()
+    {
+        try
+        {
+            if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(RefreshTray));
+        }
+        catch (InvalidOperationException)
+        {
+            // closing down: nothing to refresh
+        }
     }
 
     void Toggle()
@@ -572,6 +645,7 @@ sealed class TrayApp : Form
 
     void Quit()
     {
+        Devices.Unwatch();
         UnregisterHotKey(Handle, HotkeyId);
         poll.Stop();
         flash.Stop();
